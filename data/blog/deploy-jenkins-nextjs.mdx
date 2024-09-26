@@ -1,0 +1,56 @@
+---
+title: 'jenkins docker部署问题记录'
+date: '2024-09-08'
+tags: ['next-js', 'tailwind']
+draft: false
+summary: jenkins 自动部署Nextjs项目
+---
+
+
+## jenkins通过docker 安装
+
+### 1. 拉取镜像
+
+去[官网](https://www.jenkins.io/)下载最新版本的jenkins，命令如下：
+
+`docker pull jenkins/jenkins:2.462.1`
+
+> 由于jenkins是通过docker安装的，jenkins容器内是没有docker环境的，本文使用docker outside of docker的方式，让jenkins容器使用宿主机的docker
+
+### 2. 运行容器
+
+```shell
+docker run -d \
+  -p 8999:8080 \
+  -p 50000:50000 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v jenkins_home:/var/jenkins_home \
+  -e DOCKER_HOST=tcp://host.docker.internal:2375 \
+  jenkins/jenkins:latest-jdk17
+  
+  # -v /var/run/docker.sock:/var/run/docker.sock 将主机的 Docker 套接字挂载到 Jenkins 容器内，使 Jenkins 容器可以直接与主机上的 Docker 守护进程通信。
+  # -v /path/on/host/jenkins_home:/var/jenkins_home 挂载volume jenkins_home 数据卷持久化数据
+  # -e DOCKER_HOST=tcp://host.docker.internal:2375 \  
+  # 在容器内设置环境变量DOCKER_HOST，其值为tcp://host.docker.internal:2375。这告诉容器，Docker客户端应该通过TCP连接到宿主机的Docker守护进程。
+```
+
+### 3. 安装Docker cli 到jenkins容器
+
+```shell
+docker exec -it <jenkins_container_id> /bin/bash
+cat /etc/os-release # 查看内核版本
+apt update
+# 遇到权限问题，可以退出容器，开个root权限的shell进来
+# docker exec -u 0 -it <jenkins_container_id> /bin/bash
+apt install -y docker.io
+docker --version
+docker ps
+```
+
+### 4. 查看jenkins初始密码
+
+```shell
+docker exec -it <jenkins_container_id> bash
+cat /var/jenkins_home/secrets/initialAdminPassword
+exit
+```
