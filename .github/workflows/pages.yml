@@ -34,10 +34,6 @@ jobs:
         env:
           EXPORT: 1
           UNOPTIMIZED: 1
-      - name: Prepare Deployment Files
-        run: |
-          mkdir -p out
-          mv ./out/* ./out/
 
   deploy:
     runs-on: ubuntu-latest
