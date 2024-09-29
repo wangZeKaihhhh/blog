@@ -1,60 +1,47 @@
+# 基础镜像
 FROM node:18-alpine AS base
 
-# Install dependencies only when needed
-FROM base AS deps
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat
+# 设置工作目录
 WORKDIR /app
-# Enable Corepack
-RUN corepack enable
-# Prepare the specified version of Yarn
-RUN corepack prepare yarn@3.6.1 --activate
-# Install dependencies based on the preferred package manager
-COPY package.json yarn.lock ./
-RUN yarn --frozen-lockfile
 
-# Rebuild the source code only when needed
+# 复制 package.json 和锁文件
+COPY package.json yarn.lock* package-lock.json* ./
+
+# 安装依赖
+RUN yarn install --frozen-lockfile || npm install --frozen-lockfile
+
+# 构建应用
 FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Next.js collects completely anonymous telemetry data about general usage.
-# Learn more here: https://nextjs.org/telemetry
-# Uncomment the following line in case you want to disable telemetry during the build.
-# ENV NEXT_TELEMETRY_DISABLED=1
+# 构建 Next.js 应用
+RUN yarn build || npm run build
 
-RUN yarn run build
+# 生产环境镜像
+FROM node:18-alpine AS runner
 
-# Production image, copy all the files and run next
-FROM base AS runner
+# 设置工作目录
 WORKDIR /app
 
+# 设置环境变量
 ENV NODE_ENV=production
-# Uncomment the following line in case you want to disable telemetry during runtime.
-# ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# 创建用户和组
+RUN addgroup -g 1001 -S nextjs && adduser -S nextjs -u 1001
 
-COPY --from=builder /app/public ./public
+# 复制构建输出
+COPY --from=builder /app/.next/standalone ./ 
+COPY --from=builder /app/public ./public 
+COPY --from=builder /app/package.json ./ 
 
-# Set the correct permission for prerender cache
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
+# 确保文件权限
+RUN chown -R nextjs:nextjs ./
 
-# Automatically leverage output traces to reduce image size
-# https://nextjs.org/docs/advanced-features/output-file-tracing
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
+# 切换用户
 USER nextjs
 
+# 暴露端口
 EXPOSE 3000
 
-ENV PORT=3000
-
-# server.js is created by next build from the standalone output
-# https://nextjs.org/docs/pages/api-reference/next-config-js/output
-ENV HOSTNAME="0.0.0.0"
+# 启动应用
 CMD ["node", "server.js"]
