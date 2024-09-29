@@ -5,17 +5,17 @@ FROM node:18-alpine AS base
 WORKDIR /app
 
 # 复制 package.json 和锁文件
-COPY package.json yarn.lock* package-lock.json* ./
+COPY package.json yarn.lock ./
 
 # 安装依赖
-RUN yarn install --frozen-lockfile || npm install --frozen-lockfile
+RUN yarn install --frozen-lockfile
 
 # 构建应用
 FROM base AS builder
 COPY . .
 
 # 构建 Next.js 应用
-RUN yarn build || npm run build
+RUN yarn build
 
 # 生产环境镜像
 FROM node:18-alpine AS runner
