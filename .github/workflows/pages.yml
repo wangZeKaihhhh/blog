@@ -40,7 +40,7 @@ jobs:
     needs: build
     steps:
       - name: Deploy to Cloud Server
-        uses: appleboy/scp-action@v1.0.3
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.REMOTE_HOST }}
           username: ${{ secrets.REMOTE_USER }}
@@ -48,8 +48,9 @@ jobs:
           port: 22
           source: '.next/standalone/*'
           target: '/var/www'
+          script: rsync -avz --delete .next/standalone/ ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/var/www/
       - name: Start Application on Remote Server
-        uses: appleboy/ssh-action@v1.0.0
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.REMOTE_HOST }}
           username: ${{ secrets.REMOTE_USER }}
