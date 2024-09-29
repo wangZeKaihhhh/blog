@@ -41,9 +41,7 @@ jobs:
     steps:
       - name: view foler list
         shell: bash
-        run: ls -a
-        run: cd .
-        run: ls -a
+        run: ls -a | cd . | ls -a
       - name: Deploy to Cloud Server
         uses: easingthemes/ssh-deploy@main
         with:
