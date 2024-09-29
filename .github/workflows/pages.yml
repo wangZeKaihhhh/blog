@@ -40,7 +40,7 @@ jobs:
     needs: build
     steps:
       - name: Deploy to Cloud Server
-        uses: appleboy/scp-action@v1.0.0
+        uses: appleboy/scp-action@v1.0.3
         with:
           host: ${{ secrets.REMOTE_HOST }}
           username: ${{ secrets.REMOTE_USER }}
