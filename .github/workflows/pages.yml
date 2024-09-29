@@ -16,32 +16,20 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: yarn
-      - name: Restore cache
-        uses: actions/cache@v4
-        with:
-          path: .next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/yarn.lock') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
-          restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('**/yarn.lock') }}-
-      - run: yarn
-      - run: yarn build
-      - name: Prepare static assets
+      # 拉取main分支代码
+      - name: Checkout
+        uses: actions/checkout@v4.1.7
+
+      # 制作docker镜像并推送到阿里云容器镜像服务
+      - name: build and push docker image
         run: |
-          cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/
-      - name: Deploy to Cloud Server
-        uses: easingthemes/ssh-deploy@main
-        with:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SOURCE: '.next/standalone'
-          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
-          REMOTE_USER: ${{ secrets.REMOTE_USER }}
-          TARGET: '/var/www'
-          SCRIPT_AFTER: |
-            cd /var/www
-            pm2 start server.js --name blog-app || pm2 restart blog-app
+          echo ${{ secrets.ALIYUN_DOCKER_PASSWORD }} | docker login ${{ vars.REGISTRY_MIRROR }} --username ${{ secrets.ALIYUN_DOCKER_USERNAME }} --password-stdin
+
+          docker image build -t ${{ vars.APP_NAME }}:latest .
+          docker tag ${{ vars.APP_NAME }} ${{ vars.REGISTRY_MIRROR }}/${{ vars.REGISTRY_NAMESPACE }}/${{ vars.APP_NAME }}:latest
+          docker push ${{ vars.REGISTRY_MIRROR }}/${{ vars.REGISTRY_NAMESPACE }}/${{ vars.APP_NAME }}:latest
+          docker logout
+
+          echo "app name ${{ vars.REGISTRY_MIRROR }}"
