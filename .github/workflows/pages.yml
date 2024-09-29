@@ -40,7 +40,8 @@ jobs:
     needs: build
     steps:
       - name: view foler list
-        run: ls
+        shell: bash
+        run: ls -a
       - name: Deploy to Cloud Server
         uses: easingthemes/ssh-deploy@main
         with:
