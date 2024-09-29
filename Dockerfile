@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package.json yarn.lock ./
 
 # 安装依赖
-RUN yarn install --frozen-lockfile
+RUN yarn install
 
 # 构建应用
 FROM base AS builder
