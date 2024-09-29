@@ -31,9 +31,9 @@ jobs:
             ${{ runner.os }}-nextjs-${{ hashFiles('**/yarn.lock') }}-
       - run: yarn
       - run: yarn build
-        env:
-          EXPORT: 1
-          UNOPTIMIZED: 1
+      - name: Prepare static assets
+        run: |
+          cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/
 
   deploy:
     runs-on: ubuntu-latest
@@ -44,8 +44,8 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           REMOTE_USER: ${{ secrets.REMOTE_USER }}
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
-          REMOTE_PATH: ${{ secrets.REMOTE_PATH }}
+          REMOTE_PATH: /var/www/myapp
         run: |
           echo "$SSH_PRIVATE_KEY" > private_key
           chmod 600 private_key
-          scp -o StrictHostKeyChecking=no -i private_key -r ./out/* $REMOTE_USER@$REMOTE_HOST:$REMOTE_PATH
+          scp -o StrictHostKeyChecking=no -i private_key -r .next/standalone/* $REMOTE_USER@$REMOTE_HOST:$REMOTE_PATH
