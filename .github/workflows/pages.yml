@@ -39,17 +39,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - name: view foler list
-        shell: bash
-        run: ls -a | cd . | ls -a
       - name: Deploy to Cloud Server
         uses: easingthemes/ssh-deploy@main
         with:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SOURCE: '.next/standalone/'
+          SOURCE: '.next/standalone'
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
           REMOTE_USER: ${{ secrets.REMOTE_USER }}
-          TARGET: '/var/www/'
+          TARGET: '/var/www'
           SCRIPT_AFTER: |
             cd /var/www
             pm2 start server.js --name blog-app || pm2 restart blog-app
