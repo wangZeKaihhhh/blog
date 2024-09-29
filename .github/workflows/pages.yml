@@ -33,3 +33,18 @@ jobs:
           docker logout
 
           echo "app name ${{ vars.REGISTRY_MIRROR }}"
+      # 拉取main分支代码
+      - name: Checkout
+        uses: actions/checkout@v4.1.7
+
+      # 制作docker镜像并推送到阿里云容器镜像服务
+      - name: build and push docker image
+        run: |
+          echo ${{ secrets.ALIYUN_DOCKER_PASSWORD }} | docker login ${{ vars.REGISTRY_MIRROR }} --username ${{ secrets.ALIYUN_DOCKER_USERNAME }} --password-stdin
+
+          docker image build -t ${{ vars.APP_NAME }}:latest .
+          docker tag ${{ vars.APP_NAME }} ${{ vars.REGISTRY_MIRROR }}/${{ vars.REGISTRY_NAMESPACE }}/${{ vars.APP_NAME }}:latest
+          docker push ${{ vars.REGISTRY_MIRROR }}/${{ vars.REGISTRY_NAMESPACE }}/${{ vars.APP_NAME }}:latest
+          docker logout
+
+          echo "app name ${{ vars.REGISTRY_MIRROR }}"
