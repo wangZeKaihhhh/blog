@@ -48,7 +48,6 @@ jobs:
           port: 22
           source: '.next/standalone/*'
           target: '/var/www'
-          script: rsync -avz --delete .next/standalone/ ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/var/www/
       - name: Start Application on Remote Server
         uses: appleboy/ssh-action@v1.0.3
         with:
