@@ -3,7 +3,8 @@ const siteMetadata = {
   title: 'The Blog of wangzekai',
   author: 'wangzekai',
   headerTitle: 'The Blog of wangzekai',
-  description: 'Welcome',
+  description:
+    'I am a software development engineer and I am here to document some work issues, which may provide inspiration and solutions for everyone. Thank you for reading',
   language: 'en-us',
   theme: 'system', // system, dark or light
   siteUrl: 'https://tailwind-nextjs-starter-blog.vercel.app',

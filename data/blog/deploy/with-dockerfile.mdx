@@ -1,0 +1,193 @@
+---
+title: '自动化部署nextjs网站实践(2)'
+date: '2024-09-30'
+tags: ['next-js']
+draft: false
+summary: Github Action、Docker自动化部署
+layout: PostSimple
+---
+
+<TOCInline toc={props.toc}  />
+
+## Dockerfile、.dockerignore
+
+[Dockerfile](https://github.com/vercel/next.js/blob/canary/examples/with-docker/Dockerfile)
+```shell
+FROM node:18-alpine AS base
+
+# Install dependencies only when needed
+FROM base AS deps
+# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+# Install dependencies based on the preferred package manager
+COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
+RUN \
+  if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
+  elif [ -f package-lock.json ]; then npm ci; \
+  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i --frozen-lockfile; \
+  else echo "Lockfile not found." && exit 1; \
+  fi
+
+
+# Rebuild the source code only when needed
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Next.js collects completely anonymous telemetry data about general usage.
+# Learn more here: https://nextjs.org/telemetry
+# Uncomment the following line in case you want to disable telemetry during the build.
+# ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN \
+  if [ -f yarn.lock ]; then yarn run build; \
+  elif [ -f package-lock.json ]; then npm run build; \
+  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm run build; \
+  else echo "Lockfile not found." && exit 1; \
+  fi
+
+# Production image, copy all the files and run next
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+# Uncomment the following line in case you want to disable telemetry during runtime.
+# ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+
+# Set the correct permission for prerender cache
+RUN mkdir .next
+RUN chown nextjs:nodejs .next
+
+# Automatically leverage output traces to reduce image size
+# https://nextjs.org/docs/advanced-features/output-file-tracing
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT=3000
+
+# server.js is created by next build from the standalone output
+# https://nextjs.org/docs/pages/api-reference/next-config-js/output
+ENV HOSTNAME="0.0.0.0"
+CMD ["node", "server.js"]
+```
+[.dockerignore](https://github.com/vercel/next.js/blob/canary/examples/with-docker/.dockerignore)
+
+```shell
+Dockerfile
+.dockerignore
+node_modules
+npm-debug.log
+README.md
+.next
+.git
+```
+
+## 更改为standalone方式打包
+
+[参考](https://nextjs.org/docs/app/api-reference/next-config-js/output#automatically-copying-traced-files)
+
+```shell
+module.exports = {
+  output: 'standalone',
+}
+```
+
+## Docker命令参考
+
+- docker build . -t blog-image
+- docker run blog-image -p 3000:3000
+
+打包镜像，运行容器，做完以上操作就可以开始编写GitHub Action的步骤了
+
+## Github Action
+
+GitHub Actions 是 GitHub 提供的持续集成与持续交付（CI/CD）服务。它允许开发者自动化工作流，例如代码构建、测试、部署等。通过 GitHub Actions，开发者可以编写自定义的工作流配置文件，以定义在特定事件（如代码推送、PR 创建、定时任务等）发生时触发的自动化任务。
+
+步骤：
+1. 新建 .github文件夹
+2. 新建 .github/workflows文件夹
+3. 新建 workflows/pages.yml
+
+自动化部署思路：
+1. Docker打包完成后将镜像推送到阿里云镜像仓库
+2. SSH连接到服务器，进行镜像拉取，容器更新操作
+
+```yaml
+name: Deploy to Cloud Server
+
+on:
+  push:
+    branches: main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 拉取main分支代码
+      - name: Checkout
+        uses: actions/checkout@v4.1.7
+
+      # 制作docker镜像并推送到阿里云容器镜像服务
+      - name: build and push docker image
+        run: |
+          echo ${{ secrets.ALIYUN_DOCKER_PASSWORD }} | docker login ${{ vars.REGISTRY_MIRROR }} --username ${{ secrets.ALIYUN_DOCKER_USERNAME }} --password-stdin
+          docker image build -t ${{ vars.APP_NAME }}:latest .
+          docker tag ${{ vars.APP_NAME }} ${{ vars.REGISTRY_MIRROR }}/${{ vars.REGISTRY_NAMESPACE }}/${{ vars.APP_NAME }}:latest
+          docker push ${{ vars.REGISTRY_MIRROR }}/${{ vars.REGISTRY_NAMESPACE }}/${{ vars.APP_NAME }}:latest
+          docker logout
+          echo "app name ${{ vars.REGISTRY_MIRROR }}"
+        # 登录远程服务器，拉取镜像，制作并重启容器
+      # <https://github.com/marketplace/actions/remote-ssh-commands>
+      - name: ssh remote deploy
+        uses: fifsky/ssh-action@master
+        with:
+          command: |
+            cd /
+            echo ${{ secrets.ALIYUN_DOCKER_PASSWORD }} | docker login ${{ vars.REGISTRY_MIRROR }} --username ${{ secrets.ALIYUN_DOCKER_USERNAME }} --password-stdin
+            docker container stop ${{ vars.APP_NAME }}
+            docker container rm ${{ vars.APP_NAME }}
+            docker image rm ${{ vars.REGISTRY_MIRROR }}/${{ vars.REGISTRY_NAMESPACE }}/${{ vars.APP_NAME }}:latest
+            docker pull ${{ vars.REGISTRY_MIRROR }}/${{ vars.REGISTRY_NAMESPACE }}/${{ vars.APP_NAME }}:latest
+            docker container run -d -p 3000:3000 --name ${{ vars.APP_NAME }} ${{ vars.REGISTRY_MIRROR }}/${{ vars.REGISTRY_NAMESPACE }}/${{ vars.APP_NAME }}:latest
+            docker logout
+          host: ${{ secrets.REMOTE_HOST }}
+          user: ${{ secrets.REMOTE_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY}}
+
+```
+
+ENV环境变量如下 :  
+
+1. vars(未加密): 
+    - **REGISTRY_MIRROR** 阿里云镜像仓库
+    - **REGISTRY_NAMESPACE** 阿里云命名空间
+    - **APP_NAME** APP名称
+
+2. secrets(加密)：
+    - **REMOTE_HOST** 服务器
+    - **REMOTE_USER** 服务器登录用户
+    - **SSH_PRIVATE_KEY** 服务器私钥
+    - **ALIYUN_DOCKER_USERNAME** 阿里云镜像仓库登录用户
+    - **ALIYUN_DOCKER_PASSWORD** 阿里云镜像仓库登录密码
